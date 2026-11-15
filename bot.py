@@ -322,8 +322,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• Copy any short link\n"
         "• Paste it here\n"
         "• Get the direct link instantly\n\n"
-        "<b>Example</b>\n"
-        "<blockquote>https://link.vipshort.in/I9xA</blockquote>\n\n"
         f"<i>Powered by @{CREDIT}</i>"
     )
 
