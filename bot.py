@@ -40,7 +40,7 @@ from telegram.ext import (
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 API_KEY = os.environ["KEY"]
 TOOL = os.environ.get("TOOL", "nick-bypass")
-TIMEOUT = float(os.environ.get("TIMEOUT", "45"))
+TIMEOUT = float((os.environ.get("TIMEOUT") or "45").strip() or "45")
 
 # Agar API_URL me galti se poora URL with query paste ho gaya ho
 # (jaise ...lookup?tool=nick-bypass&key=xxx&q=), to usko saaf kar dete hain.
@@ -61,7 +61,20 @@ BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
 CREDIT = os.environ.get("CREDIT", "ModAppsKing")
 
 # Result message kitne second baad delete ho (0 = kabhi nahi)
-AUTO_DELETE = int(os.environ.get("AUTO_DELETE", "60"))
+def _int_env(name: str, default: int) -> int:
+    """Env se int padho; khali/galat value ho to default."""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        # logging isse pehle set nahi hoti, is liye print
+        print(f"[warn] {name}={raw!r} invalid, using default {default}")
+        return default
+
+
+AUTO_DELETE = _int_env("AUTO_DELETE", 60)
 
 # /start ka thumbnail (khali karo to bina photo ke)
 START_PIC = os.environ.get(
@@ -484,6 +497,17 @@ async def fsub_noop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Har handler exception yahan aayega — poora traceback log me."""
+    log.error(
+        "Handler error | update=%s | error=%s: %s",
+        type(update).__name__ if update else "None",
+        type(context.error).__name__,
+        context.error,
+        exc_info=context.error,
+    )
+
+
 # --------------------------------------------------------------------- health
 class _HealthHandler(BaseHTTPRequestHandler):
     """Render (aur baaki PaaS) ko ek open port chahiye hota hai."""
@@ -531,6 +555,8 @@ def main() -> None:
         asyncio.set_event_loop(asyncio.new_event_loop())
     except Exception as exc:  # noqa: BLE001
         log.warning("could not set event loop: %s", exc)
+
+    app.add_error_handler(on_error)
 
     log.info("bot starting (long polling)")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
