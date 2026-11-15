@@ -60,6 +60,9 @@ BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
 # Messages ke neeche credit
 CREDIT = os.environ.get("CREDIT", "ModAppsKing")
 
+# Result message kitne second baad delete ho (0 = kabhi nahi)
+AUTO_DELETE = int(os.environ.get("AUTO_DELETE", "60"))
+
 # /start ka thumbnail (khali karo to bina photo ke)
 START_PIC = os.environ.get(
     "START_PIC",
@@ -247,6 +250,21 @@ async def is_joined(bot, user, chat_id: int) -> bool:
     return False
 
 
+def schedule_delete(message, seconds: int) -> None:
+    """Message ko kuch second baad delete kar do (fire-and-forget)."""
+    if seconds <= 0 or message is None:
+        return
+
+    async def _job() -> None:
+        await asyncio.sleep(seconds)
+        try:
+            await message.delete()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("auto-delete failed: %s", exc)
+
+    asyncio.create_task(_job())
+
+
 def same_url(a: str, b: str) -> bool:
     """Do URLs practically same hain? (trailing slash / case ignore)"""
     def norm(u: str) -> str:
@@ -382,6 +400,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"<code>{html.escape(detail[:300])}</code>",
             parse_mode=ParseMode.HTML,
         )
+        schedule_delete(status, AUTO_DELETE)
         return
 
     finally:
@@ -403,28 +422,31 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if same_url(link, bypassed):
         await react(message, REACT_FAIL)
         await status.edit_text(
-            "<blockquote>⚠️ No bypass found for this link</blockquote>\n\n"
-            f"{html.escape(link)}\n\n"
-            "I couldn't pull out a direct link from this one. It may be a "
-            "shortener I don't support yet, or the link is already direct.\n\n"
-            f"<blockquote>Powered By @{CREDIT}</blockquote>",
+            "<blockquote><b>⚠️ No bypass found for this link</b></blockquote>\n"
+            "<blockquote>" + html.escape(link) + "</blockquote>\n"
+            "<blockquote><b>I couldn't pull out a direct link from this one.</b> "
+            "It may be a shortener I don't support yet, or the link is already "
+            "direct.</blockquote>\n"
+            "─────────────\n"
+            f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
             parse_mode=ParseMode.HTML,
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
+        schedule_delete(status, AUTO_DELETE)
         return
 
     await react(message, REACT_OK)
 
     await status.edit_text(
-        "<blockquote>🔗 Original Link</blockquote>\n"
-        f"{html.escape(link)}\n\n"
-        "<blockquote>✅ Bypassed Link</blockquote>\n"
-        f"{html.escape(bypassed)}\n\n"
-        f"<blockquote>⏱ Time Taken : {elapsed:.0f} seconds</blockquote>\n"
-        f"<blockquote>Powered By @{CREDIT}</blockquote>",
+        "<blockquote><b>Original Link :</b> ✅ " + html.escape(link) + "</blockquote>\n"
+        "<blockquote><b>Bypassed Link:</b> ✅ " + html.escape(bypassed) + "</blockquote>\n"
+        f"<blockquote><b>Time Taken :</b> {elapsed:.0f} seconds</blockquote>\n"
+        "─────────────\n"
+        f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
+    schedule_delete(status, AUTO_DELETE)
 
 
 async def fsub_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
