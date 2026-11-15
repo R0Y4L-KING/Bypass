@@ -212,8 +212,12 @@ async def channel_button(bot, chat_id: str) -> InlineKeyboardButton:
 
     title, url = cached
     if url:
-        return InlineKeyboardButton(title.upper(), url=url)
-    return InlineKeyboardButton(f"{title.upper()} ⚠️", callback_data="fsub_noop")
+        return InlineKeyboardButton(
+            f"🚀 {title.upper()}", url=url, style="primary"
+        )
+    return InlineKeyboardButton(
+        f"⚠️ {title.upper()}", callback_data="fsub_noop", style="danger"
+    )
 
 
 def fsub_caption(first_name: str) -> str:
@@ -225,7 +229,9 @@ def fsub_caption(first_name: str) -> str:
 async def send_force_sub(bot, chat_id: int, missing: list[str], first_name: str) -> None:
     """Force-sub message bhejo — photo ke saath agar FSUB_PIC set hai."""
     rows = [[await channel_button(bot, ch)] for ch in missing]
-    rows.append([InlineKeyboardButton("♻️ Try Again", callback_data="fsub_retry")])
+    rows.append(
+        [InlineKeyboardButton("✅ VERIFY", callback_data="fsub_retry", style="success")]
+    )
 
     markup = InlineKeyboardMarkup(rows)
     caption = fsub_caption(first_name)
