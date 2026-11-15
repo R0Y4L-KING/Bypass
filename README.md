@@ -28,6 +28,7 @@ Bot: [@KingBypassRobot](https://t.me/KingBypassRobot)
 | `KEY` | haan | — | **Sirf API key** (poora URL nahi) |
 | `BOT_USERNAME` | nahi | `KingBypassRobot` | Bot ka username, bina `@` ke |
 | `FSUB_CHANNELS` | nahi | khali | Force-sub channels, comma separated |
+| `FSUB_PIC` | nahi | khali | Force-sub banner image ka direct link |
 | `FSUB_MSG` | nahi | built-in | Force-sub message ka custom text |
 | `API_URL` | nahi | Altaf API endpoint | API ka base URL |
 | `TOOL` | nahi | `nick-bypass` | Kaunsa bypass tool chalana hai |
@@ -62,6 +63,10 @@ Agar kabhi endpoint badle to `API_URL` alag se set kar dena.
 ```
 FSUB_CHANNELS=@mychannel,-1001234567890
 ```
+
+Banner image chahiye to `FSUB_PIC` me us image ka direct link daal do (jpg/png).
+Set nahi kiya to wahi message bina photo ke chala jayega. Message ka text badalna
+ho to `FSUB_MSG` — usme `{name}` ki jagah user ka naam aa jaata hai.
 
 Kaam kaise karta hai:
 

@@ -14,3 +14,7 @@ services:
         value: KingBypassRobot
       - key: FSUB_CHANNELS
         sync: false
+      - key: FSUB_PIC
+        sync: false
+      - key: FSUB_MSG
+        sync: false

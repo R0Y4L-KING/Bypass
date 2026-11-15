@@ -50,10 +50,12 @@ FSUB_CHANNELS = [
     for c in os.environ.get("FSUB_CHANNELS", "").split(",")
     if c.strip()
 ]
+FSUB_PIC = os.environ.get("FSUB_PIC", "").strip()
 FSUB_MSG = os.environ.get(
     "FSUB_MSG",
-    "🔒 <b>Pehle humare channel join karo</b>\n\n"
-    "Neeche diye buttons se join karo, phir <b>Try Again</b> dabao.",
+    "ʜᴇʟʟᴏ {name}\n\n"
+    "<b><blockquote>ᴊᴏɪɴ ᴏᴜʀ ᴄʜᴀɴɴᴇʟꜱ ᴀɴᴅ ᴛʜᴇɴ ᴄʟɪᴄᴋ ᴏɴ "
+    "ʀᴇʟᴏᴀᴅ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ʀᴇǫᴜᴇꜱᴛᴇᴅ ʟɪɴᴋ.</blockquote></b>",
 )
 
 URL_RE = re.compile(r"https?://[^\s\"'<>]+")
@@ -143,29 +145,54 @@ async def channel_button(bot, chat_id: str) -> InlineKeyboardButton:
 
     title, url = cached
     if url:
-        return InlineKeyboardButton(f"📢 {title}", url=url)
-    return InlineKeyboardButton(f"📢 {title}", callback_data="fsub_noop")
+        return InlineKeyboardButton(title.upper(), url=url)
+    return InlineKeyboardButton(f"{title.upper()} ⚠️", callback_data="fsub_noop")
 
 
-async def send_force_sub(bot, chat_id: int, missing: list[str]) -> None:
+def fsub_caption(first_name: str) -> str:
+    return FSUB_MSG.replace("{name}", html.escape(first_name)).replace(
+        "{mention}", html.escape(first_name)
+    )
+
+
+async def send_force_sub(bot, chat_id: int, missing: list[str], first_name: str) -> None:
+    """Force-sub message bhejo — photo ke saath agar FSUB_PIC set hai."""
     rows = [[await channel_button(bot, ch)] for ch in missing]
-    rows.append([InlineKeyboardButton("🔄 Try Again", callback_data="fsub_retry")])
+    rows.append([InlineKeyboardButton("♻️ Try Again", callback_data="fsub_retry")])
+
+    markup = InlineKeyboardMarkup(rows)
+    caption = fsub_caption(first_name)
+
+    if FSUB_PIC:
+        try:
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=FSUB_PIC,
+                caption=caption,
+                reply_markup=markup,
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.warning("send_photo failed (%s), falling back to text", exc)
 
     await bot.send_message(
         chat_id=chat_id,
-        text=FSUB_MSG,
-        reply_markup=InlineKeyboardMarkup(rows),
+        text=caption,
+        reply_markup=markup,
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
     )
 
 
-async def is_joined(bot, user_id: int, chat_id: int) -> bool:
+async def is_joined(bot, user, chat_id: int) -> bool:
     """True agar user sab channels me hai, warna force-sub message bhej ke False."""
-    missing = await missing_channels(bot, user_id)
+    missing = await missing_channels(bot, user.id)
     if not missing:
         return True
-    await send_force_sub(bot, chat_id, missing)
+
+    first_name = user.first_name or "User"
+    await send_force_sub(bot, chat_id, missing, first_name)
     return False
 
 
@@ -174,7 +201,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     message = update.effective_message
 
-    if user and not await is_joined(context.bot, user.id, message.chat_id):
+    if user and not await is_joined(context.bot, user, message.chat_id):
         return
 
     await message.reply_text(
@@ -192,7 +219,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     message = update.effective_message
 
-    if user and not await is_joined(context.bot, user.id, message.chat_id):
+    if user and not await is_joined(context.bot, user, message.chat_id):
         return
 
     await message.reply_text(
@@ -215,7 +242,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if message is None:
         return
 
-    if user and not await is_joined(context.bot, user.id, message.chat_id):
+    if user and not await is_joined(context.bot, user, message.chat_id):
         return
 
     text = message.text or ""
@@ -282,11 +309,21 @@ async def fsub_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     await query.answer("✅ Verified!")
-    await query.message.edit_text(
-        "✅ Verification ho gaya!\n\n"
-        "Ab koi bhi short link bhejo, bypass kar dunga.",
-        parse_mode=ParseMode.HTML,
+    text = (
+        "✅ <b>Verification Successful!</b>\n\n"
+        "Ab koi bhi short link bhejo, bypass kar dunga."
     )
+    try:
+        await query.message.edit_caption(caption=text, parse_mode=ParseMode.HTML)
+    except Exception:  # noqa: BLE001
+        try:
+            await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+        except Exception:  # noqa: BLE001
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=text,
+                parse_mode=ParseMode.HTML,
+            )
 
 
 async def fsub_noop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
