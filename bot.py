@@ -57,6 +57,9 @@ else:
     API_URL = _raw_url.rstrip("/")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
 
+# Messages ke neeche credit
+CREDIT = os.environ.get("CREDIT", "ModAppsKing")
+
 # Message reactions — khali string daalo to us step pe reaction nahi lagega
 REACT_EVERY = os.environ.get("REACT_EVERY", "👀")   # har message pe
 REACT_START = os.environ.get("REACT_START", "⚡")
@@ -238,6 +241,16 @@ async def is_joined(bot, user, chat_id: int) -> bool:
     return False
 
 
+def same_url(a: str, b: str) -> bool:
+    """Do URLs practically same hain? (trailing slash / case ignore)"""
+    def norm(u: str) -> str:
+        u = (u or "").strip().lower()
+        u = u.split("#")[0]
+        return u.rstrip("/")
+
+    return norm(a) == norm(b)
+
+
 async def react(message, emoji: str) -> None:
     """User ke message pe emoji reaction lagao (fail ho to chup-chaap ignore)."""
     if not emoji or message is None:
@@ -266,7 +279,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Mujhe koi bhi short link bhejo, main uska direct link nikaal dunga.\n\n"
         "<b>Example</b>\n"
         "<code>https://link.vipshort.in/I9xA</code>\n\n"
-        f"<i>Powered by @{BOT_USERNAME}</i>",
+        f"<i>Powered by @{CREDIT}</i>",
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
@@ -356,6 +369,19 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         return
 
+    # API ne "success" bola par link wahi ka wahi hai — matlab bypass hua hi nahi
+    if same_url(link, bypassed):
+        await react(message, REACT_FAIL)
+        await status.edit_text(
+            "❌ <b>Bypass nahi mila</b>\n\n"
+            f"<code>{html.escape(link)}</code>\n\n"
+            "Ye kisi shortener ka link nahi lagta — direct link hai, "
+            "isliye bypass karne ko kuch nahi tha.",
+            parse_mode=ParseMode.HTML,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        )
+        return
+
     await react(message, REACT_OK)
 
     credits = data.get("credits") or {}
@@ -368,7 +394,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"<code>{html.escape(bypassed)}</code>\n\n"
         f"⏱ {elapsed:.1f}s\n"
         f"💳 Credits used: {used}\n"
-        f"<i>Powered by @{BOT_USERNAME}</i>",
+        f"<i>Powered by @{CREDIT}</i>",
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
