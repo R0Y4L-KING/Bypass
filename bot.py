@@ -7,6 +7,7 @@ API response plain text hota hai, is liye result ko parse kiya jaata hai.
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 import os
@@ -369,6 +370,13 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(fsub_retry, pattern="^fsub_retry$"))
     app.add_handler(CallbackQueryHandler(fsub_noop, pattern="^fsub_noop$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
+
+    # Python 3.12+ pe get_event_loop() khud loop nahi banata, is liye
+    # run_polling se pehle ek loop set kar dete hain.
+    try:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("could not set event loop: %s", exc)
 
     log.info("bot starting (long polling)")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
