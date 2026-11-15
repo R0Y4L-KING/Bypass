@@ -452,9 +452,9 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         f"<blockquote><b>—✦— {CREDIT} —✦—</b></blockquote>\n"
         "<blockquote>" + html.escape(link) + "</blockquote>\n\n"
         "<blockquote><b>Original Link :</b></blockquote>\n"
-        "✅ " + html.escape(link) + "\n\n"
+        "<blockquote>✅ " + html.escape(link) + "</blockquote>\n\n"
         "<blockquote><b>Bypassed Link:</b></blockquote>\n"
-        "✅ " + html.escape(bypassed) + "\n\n"
+        "<blockquote>✅ " + html.escape(bypassed) + "</blockquote>\n\n"
         f"<blockquote><b>Time Taken :</b> {elapsed:.0f} seconds</blockquote>\n\n"
         "─────────────\n\n"
         f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
