@@ -58,6 +58,7 @@ else:
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
 
 # Message reactions — khali string daalo to us step pe reaction nahi lagega
+REACT_EVERY = os.environ.get("REACT_EVERY", "👀")   # har message pe
 REACT_START = os.environ.get("REACT_START", "⚡")
 REACT_OK = os.environ.get("REACT_OK", "🔥")
 REACT_FAIL = os.environ.get("REACT_FAIL", "😢")
@@ -248,6 +249,11 @@ async def react(message, emoji: str) -> None:
 
 
 # --------------------------------------------------------------------- handlers
+async def react_every_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Har incoming message pe reaction — /start, commands, sab pe."""
+    await react(update.effective_message, REACT_EVERY)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     message = update.effective_message
@@ -307,7 +313,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     link = match.group(0)
-    await react(message, REACT_START)
+    if not REACT_EVERY:
+        await react(message, REACT_START)
     status = await message.reply_text("🔗 Bypassing…")
     started = time.perf_counter()
 
@@ -433,6 +440,10 @@ def main() -> None:
         log.info("force-sub disabled (FSUB_CHANNELS khali hai)")
 
     app = Application.builder().token(BOT_TOKEN).build()
+    # group=-1 → baaki handlers se pehle chalta hai, par unhe rokta nahi
+    app.add_handler(
+        MessageHandler(filters.ALL, react_every_message, block=False), group=-1
+    )
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CallbackQueryHandler(fsub_retry, pattern="^fsub_retry$"))
