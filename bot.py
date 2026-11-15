@@ -16,6 +16,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
+from urllib.parse import parse_qsl
 
 import httpx
 from telegram import (
@@ -37,11 +38,22 @@ from telegram.ext import (
 # --------------------------------------------------------------------- config
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 API_KEY = os.environ["KEY"]
-API_URL = os.environ.get(
-    "API_URL", "https://altaf-api-maker.base44.app/functions/lookup"
-)
 TOOL = os.environ.get("TOOL", "nick-bypass")
-TIMEOUT = float(os.environ.get("TIMEOUT", "45"))
+TIMEOUT = float(os.environ.get("TIMEOUT", "90"))
+
+# Agar API_URL me galti se poora URL with query paste ho gaya ho
+# (jaise ...lookup?tool=nick-bypass&key=xxx&q=), to usko saaf kar dete hain.
+_raw_url = os.environ.get(
+    "API_URL", "https://altaf-api-maker.base44.app/functions/lookup"
+).strip()
+if "?" in _raw_url:
+    _base, _qs = _raw_url.split("?", 1)
+    _q = dict(parse_qsl(_qs))
+    API_URL = _base.rstrip("/")
+    API_KEY = _q.get("key", API_KEY)
+    TOOL = _q.get("tool", TOOL)
+else:
+    API_URL = _raw_url.rstrip("/")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
 
 # Force-subscribe channels: comma separated, @username ya -100... id
@@ -74,22 +86,44 @@ _CHAT_CACHE: dict[str, tuple[str, Optional[str]]] = {}
 async def call_api(link: str) -> dict:
     """API ko call karke JSON response lauta do. Fail hone pe exception."""
     params = {"tool": TOOL, "key": API_KEY, "q": link}
+    last_exc: Optional[Exception] = None
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.get(API_URL, params=params)
+    for attempt in range(1, 4):  # 3 tries — API kabhi 20s+ leti hai
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(TIMEOUT, connect=20.0), follow_redirects=True
+            ) as client:
+                resp = await client.get(API_URL, params=params)
 
-    if resp.status_code != 200:
-        raise RuntimeError(f"API HTTP {resp.status_code}")
+            if resp.status_code != 200:
+                body = (resp.text or "").strip().replace("\n", " ")[:200]
+                raise RuntimeError(f"API HTTP {resp.status_code}: {body}")
 
-    try:
-        data = resp.json()
-    except ValueError:
-        raise RuntimeError("API ne JSON ke bajaye kuch aur bheja") from None
+            try:
+                data = resp.json()
+            except ValueError:
+                raise RuntimeError(
+                    f"API ne JSON nahi bheja: {(resp.text or '')[:200]}"
+                ) from None
 
-    if not data.get("success"):
-        raise RuntimeError(data.get("notice") or "API returned success=false")
+            if not data.get("success"):
+                raise RuntimeError(data.get("notice") or "API returned success=false")
 
-    return data
+            return data
+
+        except (httpx.TimeoutException, httpx.TransportError) as exc:
+            last_exc = exc
+            log.warning(
+                "attempt %s/3 failed for %s: %s: %s",
+                attempt, link, type(exc).__name__, exc,
+            )
+            if attempt < 3:
+                await asyncio.sleep(2)
+
+    raise RuntimeError(
+        f"{type(last_exc).__name__}: {last_exc or 'connection failed'} "
+        f"(timeout {TIMEOUT:.0f}s, 3 tries)"
+    )
 
 
 def pick_url(text: str, label: str) -> Optional[str]:
@@ -264,9 +298,10 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         data = await call_api(link)
     except Exception as exc:  # noqa: BLE001
         log.exception("bypass failed for %s", link)
+        detail = str(exc).strip() or type(exc).__name__
         await status.edit_text(
             "❌ Bypass fail ho gaya.\n"
-            f"<code>{html.escape(str(exc)[:300])}</code>",
+            f"<code>{html.escape(detail[:300])}</code>",
             parse_mode=ParseMode.HTML,
         )
         return
