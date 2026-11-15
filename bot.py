@@ -21,6 +21,7 @@ from urllib.parse import parse_qsl
 import httpx
 from telegram import (
     InlineKeyboardButton,
+    ReactionTypeEmoji,
     InlineKeyboardMarkup,
     LinkPreviewOptions,
     Update,
@@ -55,6 +56,11 @@ if "?" in _raw_url:
 else:
     API_URL = _raw_url.rstrip("/")
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
+
+# Message reactions — khali string daalo to us step pe reaction nahi lagega
+REACT_START = os.environ.get("REACT_START", "⚡")
+REACT_OK = os.environ.get("REACT_OK", "🔥")
+REACT_FAIL = os.environ.get("REACT_FAIL", "😢")
 
 # Force-subscribe channels: comma separated, @username ya -100... id
 # Example: FSUB_CHANNELS=@mychannel,-1001234567890
@@ -231,6 +237,16 @@ async def is_joined(bot, user, chat_id: int) -> bool:
     return False
 
 
+async def react(message, emoji: str) -> None:
+    """User ke message pe emoji reaction lagao (fail ho to chup-chaap ignore)."""
+    if not emoji or message is None:
+        return
+    try:
+        await message.set_reaction([ReactionTypeEmoji(emoji=emoji)])
+    except Exception as exc:  # noqa: BLE001
+        log.debug("reaction %s failed: %s", emoji, exc)
+
+
 # --------------------------------------------------------------------- handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
@@ -291,6 +307,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     link = match.group(0)
+    await react(message, REACT_START)
     status = await message.reply_text("🔗 Bypassing…")
     started = time.perf_counter()
 
@@ -309,6 +326,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception as exc:  # noqa: BLE001
         log.exception("bypass failed for %s", link)
         detail = str(exc).strip() or type(exc).__name__
+        await react(message, REACT_FAIL)
         await status.edit_text(
             "❌ Bypass fail ho gaya.\n"
             f"<code>{html.escape(detail[:300])}</code>",
@@ -330,6 +348,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode=ParseMode.HTML,
         )
         return
+
+    await react(message, REACT_OK)
 
     credits = data.get("credits") or {}
     used = credits.get("used", "?")
