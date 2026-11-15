@@ -403,10 +403,11 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if same_url(link, bypassed):
         await react(message, REACT_FAIL)
         await status.edit_text(
-            "<blockquote>❌ No bypass for this link</blockquote>\n\n"
+            "<blockquote>⚠️ No bypass found for this link</blockquote>\n\n"
             f"{html.escape(link)}\n\n"
-            "This doesn't look like a shortener link — it's already a direct "
-            "link, so there was nothing to bypass.",
+            "I couldn't pull out a direct link from this one. It may be a "
+            "shortener I don't support yet, or the link is already direct.\n\n"
+            f"<blockquote>Powered By @{CREDIT}</blockquote>",
             parse_mode=ParseMode.HTML,
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
