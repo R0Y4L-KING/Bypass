@@ -13,8 +13,6 @@ services:
       - key: BOT_USERNAME
         value: KingBypassRobot
       - key: FSUB_CHANNELS
-        sync: false
+        value: "@ModAppsKing,@EduAppsKing"
       - key: FSUB_PIC
-        sync: false
-      - key: FSUB_MSG
-        sync: false
+        value: https://raw.githubusercontent.com/R0Y4L-KING/Bypass/main/assets/banner.jpg
