@@ -15,4 +15,6 @@ services:
       - key: FSUB_CHANNELS
         value: "@ModAppsKing,@EduAppsKing"
       - key: FSUB_PIC
-        value: https://raw.githubusercontent.com/R0Y4L-KING/Bypass/main/assets/banner.jpg
+        value: https://raw.githubusercontent.com/R0Y4L-KING/Bypass/main/assets/fsub-banner.jpg
+      - key: PYTHON_VERSION
+        value: 3.12.6
