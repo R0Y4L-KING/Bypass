@@ -322,7 +322,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• Copy any short link\n"
         "• Paste it here\n"
         "• Get the direct link instantly\n\n"
-        f"<i>Powered by @{CREDIT}</i>"
+        f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>"
     )
 
     if START_PIC:
