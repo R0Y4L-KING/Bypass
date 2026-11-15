@@ -352,14 +352,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     await message.reply_text(
-        "<b>Kaise use karein</b>\n\n"
-        "1. Koi bhi short link copy karo\n"
-        "2. Is bot ko bhejo\n"
-        "3. Direct link mil jayega\n\n"
+        "<b>How to use</b>\n\n"
+        "1. Copy any short link\n"
+        "2. Send it to me\n"
+        "3. Get the direct link\n\n"
         "<b>Commands</b>\n"
         "/start — welcome\n"
-        "/help — yeh message\n\n"
-        "<i>Sirf http:// ya https:// wale links chalte hain.</i>",
+        "/help — this message\n\n"
+        f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
@@ -378,8 +378,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     match = URL_RE.search(text)
     if not match:
         await message.reply_text(
-            "❌ Koi valid link nahi mila.\n"
-            "Link <code>http://</code> ya <code>https://</code> se shuru hona chahiye.",
+            "<blockquote><b>❌ No valid link found</b></blockquote>\n"
+            "Send a link that starts with <b>http://</b> or <b>https://</b>.",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -394,7 +394,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         """20s baad user ko batao ki kaam chal raha hai."""
         await asyncio.sleep(20)
         try:
-            await status.edit_text("⏳ Thoda time lag raha hai… API slow hai, ruko.")
+            await status.edit_text("⏳ Still working… the API is slow, hang tight.")
         except Exception:  # noqa: BLE001
             pass
 
@@ -407,7 +407,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         detail = str(exc).strip() or type(exc).__name__
         await react(message, REACT_FAIL)
         await status.edit_text(
-            "❌ Bypass fail ho gaya.\n"
+            "<blockquote><b>❌ Bypass failed</b></blockquote>\n"
             f"<code>{html.escape(detail[:300])}</code>",
             parse_mode=ParseMode.HTML,
         )
@@ -423,7 +423,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if not bypassed:
         await status.edit_text(
-            "❌ Bypassed link nahi mila.\n\n"
+            "<blockquote><b>❌ No bypassed link found</b></blockquote>\n"
             f"<pre>{html.escape(result_text[:3000])}</pre>",
             parse_mode=ParseMode.HTML,
         )
@@ -449,10 +449,14 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await react(message, REACT_OK)
 
     await status.edit_text(
-        "<blockquote><b>Original Link :</b> ✅ " + html.escape(link) + "</blockquote>\n"
-        "<blockquote><b>Bypassed Link:</b> ✅ " + html.escape(bypassed) + "</blockquote>\n"
-        f"<blockquote><b>Time Taken :</b> {elapsed:.0f} seconds</blockquote>\n"
-        "─────────────\n"
+        f"<blockquote><b>—✦— {CREDIT} —✦—</b></blockquote>\n"
+        "<blockquote>" + html.escape(link) + "</blockquote>\n\n"
+        "<blockquote><b>Original Link :</b></blockquote>\n"
+        "✅ " + html.escape(link) + "\n\n"
+        "<blockquote><b>Bypassed Link:</b></blockquote>\n"
+        "✅ " + html.escape(bypassed) + "\n\n"
+        f"<blockquote><b>Time Taken :</b> {elapsed:.0f} seconds</blockquote>\n\n"
+        "─────────────\n\n"
         f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
