@@ -39,7 +39,7 @@ from telegram.ext import (
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 API_KEY = os.environ["KEY"]
 TOOL = os.environ.get("TOOL", "nick-bypass")
-TIMEOUT = float(os.environ.get("TIMEOUT", "90"))
+TIMEOUT = float(os.environ.get("TIMEOUT", "45"))
 
 # Agar API_URL me galti se poora URL with query paste ho gaya ho
 # (jaise ...lookup?tool=nick-bypass&key=xxx&q=), to usko saaf kar dete hain.
@@ -88,10 +88,10 @@ async def call_api(link: str) -> dict:
     params = {"tool": TOOL, "key": API_KEY, "q": link}
     last_exc: Optional[Exception] = None
 
-    for attempt in range(1, 4):  # 3 tries — API kabhi 20s+ leti hai
+    for attempt in range(1, 3):  # 2 tries — zyada retry user ko atka deta hai
         try:
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(TIMEOUT, connect=20.0), follow_redirects=True
+                timeout=httpx.Timeout(TIMEOUT, connect=15.0), follow_redirects=True
             ) as client:
                 resp = await client.get(API_URL, params=params)
 
@@ -114,15 +114,15 @@ async def call_api(link: str) -> dict:
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             last_exc = exc
             log.warning(
-                "attempt %s/3 failed for %s: %s: %s",
+                "attempt %s/2 failed for %s: %s: %s",
                 attempt, link, type(exc).__name__, exc,
             )
-            if attempt < 3:
-                await asyncio.sleep(2)
+            if attempt < 2:
+                await asyncio.sleep(1.5)
 
     raise RuntimeError(
         f"{type(last_exc).__name__}: {last_exc or 'connection failed'} "
-        f"(timeout {TIMEOUT:.0f}s, 3 tries)"
+        f"(timeout {TIMEOUT:.0f}s, 2 tries)"
     )
 
 
@@ -294,6 +294,16 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     status = await message.reply_text("🔗 Bypassing…")
     started = time.perf_counter()
 
+    async def nudge() -> None:
+        """20s baad user ko batao ki kaam chal raha hai."""
+        await asyncio.sleep(20)
+        try:
+            await status.edit_text("⏳ Thoda time lag raha hai… API slow hai, ruko.")
+        except Exception:  # noqa: BLE001
+            pass
+
+    nudge_task = asyncio.create_task(nudge())
+
     try:
         data = await call_api(link)
     except Exception as exc:  # noqa: BLE001
@@ -305,6 +315,9 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode=ParseMode.HTML,
         )
         return
+
+    finally:
+        nudge_task.cancel()
 
     result_text = data.get("result") or ""
     bypassed = pick_url(result_text, "bypassed link")
