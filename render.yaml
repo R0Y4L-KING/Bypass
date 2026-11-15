@@ -11,4 +11,6 @@ services:
       - key: KEY
         sync: false
       - key: BOT_USERNAME
+        value: KingBypassRobot
+      - key: FSUB_CHANNELS
         sync: false

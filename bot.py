@@ -17,10 +17,16 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
 
 import httpx
-from telegram import LinkPreviewOptions, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LinkPreviewOptions,
+    Update,
+)
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -35,7 +41,20 @@ API_URL = os.environ.get(
 )
 TOOL = os.environ.get("TOOL", "nick-bypass")
 TIMEOUT = float(os.environ.get("TIMEOUT", "45"))
-BOT_USERNAME = os.environ.get("BOT_USERNAME", "Your_Bypass_Bot")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
+
+# Force-subscribe channels: comma separated, @username ya -100... id
+# Example: FSUB_CHANNELS=@mychannel,-1001234567890
+FSUB_CHANNELS = [
+    c.strip()
+    for c in os.environ.get("FSUB_CHANNELS", "").split(",")
+    if c.strip()
+]
+FSUB_MSG = os.environ.get(
+    "FSUB_MSG",
+    "🔒 <b>Pehle humare channel join karo</b>\n\n"
+    "Neeche diye buttons se join karo, phir <b>Try Again</b> dabao.",
+)
 
 URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 
@@ -43,6 +62,9 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 log = logging.getLogger("bypass-bot")
+
+# chat_id -> (title, join_url) cache, taaki baar baar get_chat na karna pade
+_CHAT_CACHE: dict[str, tuple[str, Optional[str]]] = {}
 
 
 # --------------------------------------------------------------------- api
@@ -82,9 +104,80 @@ def pick_url(text: str, label: str) -> Optional[str]:
     return urls[-1].rstrip("─—–- ") if urls else None
 
 
+# --------------------------------------------------------------------- force sub
+async def missing_channels(bot, user_id: int) -> list[str]:
+    """Woh channels lauta do jo user ne join nahi kiye."""
+    if not FSUB_CHANNELS:
+        return []
+
+    missing: list[str] = []
+    for chat_id in FSUB_CHANNELS:
+        try:
+            member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+            if member.status in ("left", "kicked"):
+                missing.append(chat_id)
+        except Exception as exc:  # noqa: BLE001
+            # Bot us channel me admin nahi hai, ya channel id galat hai.
+            # User ko block na karo, bas log kar do.
+            log.warning("get_chat_member failed for %s: %s", chat_id, exc)
+    return missing
+
+
+async def channel_button(bot, chat_id: str) -> InlineKeyboardButton:
+    """Channel ka title + join link nikaalo (cached)."""
+    cached = _CHAT_CACHE.get(chat_id)
+    if cached is None:
+        title, url = chat_id, None
+        try:
+            chat = await bot.get_chat(chat_id)
+            title = chat.title or chat_id
+            if chat.invite_link:
+                url = chat.invite_link
+            elif chat.username:
+                url = f"https://t.me/{chat.username}"
+        except Exception as exc:  # noqa: BLE001
+            log.warning("get_chat failed for %s: %s", chat_id, exc)
+
+        cached = (title, url)
+        _CHAT_CACHE[chat_id] = cached
+
+    title, url = cached
+    if url:
+        return InlineKeyboardButton(f"📢 {title}", url=url)
+    return InlineKeyboardButton(f"📢 {title}", callback_data="fsub_noop")
+
+
+async def send_force_sub(bot, chat_id: int, missing: list[str]) -> None:
+    rows = [[await channel_button(bot, ch)] for ch in missing]
+    rows.append([InlineKeyboardButton("🔄 Try Again", callback_data="fsub_retry")])
+
+    await bot.send_message(
+        chat_id=chat_id,
+        text=FSUB_MSG,
+        reply_markup=InlineKeyboardMarkup(rows),
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+
+
+async def is_joined(bot, user_id: int, chat_id: int) -> bool:
+    """True agar user sab channels me hai, warna force-sub message bhej ke False."""
+    missing = await missing_channels(bot, user_id)
+    if not missing:
+        return True
+    await send_force_sub(bot, chat_id, missing)
+    return False
+
+
 # --------------------------------------------------------------------- handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(
+    user = update.effective_user
+    message = update.effective_message
+
+    if user and not await is_joined(context.bot, user.id, message.chat_id):
+        return
+
+    await message.reply_text(
         "👋 <b>Bypass Bot</b>\n\n"
         "Mujhe koi bhi short link bhejo, main uska direct link nikaal dunga.\n\n"
         "<b>Example</b>\n"
@@ -96,7 +189,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.effective_message.reply_text(
+    user = update.effective_user
+    message = update.effective_message
+
+    if user and not await is_joined(context.bot, user.id, message.chat_id):
+        return
+
+    await message.reply_text(
         "<b>Kaise use karein</b>\n\n"
         "1. Koi bhi short link copy karo\n"
         "2. Is bot ko bhejo\n"
@@ -112,7 +211,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
+    user = update.effective_user
     if message is None:
+        return
+
+    if user and not await is_joined(context.bot, user.id, message.chat_id):
         return
 
     text = message.text or ""
@@ -168,6 +271,31 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
+async def fsub_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """'Try Again' button — membership dobara check karo."""
+    query = update.callback_query
+    user = query.from_user
+
+    missing = await missing_channels(context.bot, user.id)
+    if missing:
+        await query.answer("❌ Abhi bhi join nahi kiya!", show_alert=True)
+        return
+
+    await query.answer("✅ Verified!")
+    await query.message.edit_text(
+        "✅ Verification ho gaya!\n\n"
+        "Ab koi bhi short link bhejo, bypass kar dunga.",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def fsub_noop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Jis channel ka invite link nahi mila, us button ke liye."""
+    await update.callback_query.answer(
+        "Is channel ka link nahi mila. Bot ko channel me admin banao.", show_alert=True
+    )
+
+
 # --------------------------------------------------------------------- health
 class _HealthHandler(BaseHTTPRequestHandler):
     """Render (aur baaki PaaS) ko ek open port chahiye hota hai."""
@@ -193,9 +321,16 @@ def start_health_server() -> None:
 def main() -> None:
     start_health_server()
 
+    if FSUB_CHANNELS:
+        log.info("force-sub channels: %s", ", ".join(FSUB_CHANNELS))
+    else:
+        log.info("force-sub disabled (FSUB_CHANNELS khali hai)")
+
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CallbackQueryHandler(fsub_retry, pattern="^fsub_retry$"))
+    app.add_handler(CallbackQueryHandler(fsub_noop, pattern="^fsub_noop$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
 
     log.info("bot starting (long polling)")
