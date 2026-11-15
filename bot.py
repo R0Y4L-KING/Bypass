@@ -428,11 +428,21 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     elapsed = time.perf_counter() - started
 
     if not bypassed:
+        # API ne koi URL nahi diya (kabhi gate ka page text bhej deti hai).
+        # Raw text user ko dikhana confusing hai — sirf log karo.
+        log.warning("no URL in API result for %s: %r", link, result_text[:500])
+        await react(message, REACT_FAIL)
         await status.edit_text(
             "<blockquote><b>❌ No bypassed link found</b></blockquote>\n"
-            f"<pre>{html.escape(result_text[:3000])}</pre>",
+            "<blockquote>" + html.escape(link) + "</blockquote>\n"
+            "<blockquote>The shortener didn't return a direct link this time. "
+            "Please try again in a moment.</blockquote>\n"
+            "─────────────\n"
+            f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
             parse_mode=ParseMode.HTML,
+            link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
+        schedule_delete(status, AUTO_DELETE)
         return
 
     # API ne "success" bola par link wahi ka wahi hai — matlab bypass hua hi nahi
