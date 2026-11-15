@@ -60,6 +60,12 @@ BOT_USERNAME = os.environ.get("BOT_USERNAME", "KingBypassRobot")
 # Messages ke neeche credit
 CREDIT = os.environ.get("CREDIT", "ModAppsKing")
 
+# /start ka thumbnail (khali karo to bina photo ke)
+START_PIC = os.environ.get(
+    "START_PIC",
+    "https://raw.githubusercontent.com/R0Y4L-KING/Bypass/main/assets/fsub-banner.jpg",
+).strip()
+
 # Message reactions — khali string daalo to us step pe reaction nahi lagega
 REACT_EVERY = os.environ.get("REACT_EVERY", "👀")   # har message pe
 REACT_START = os.environ.get("REACT_START", "⚡")
@@ -274,12 +280,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if user and not await is_joined(context.bot, user, message.chat_id):
         return
 
-    await message.reply_text(
-        "👋 <b>Bypass Bot</b>\n\n"
-        "Mujhe koi bhi short link bhejo, main uska direct link nikaal dunga.\n\n"
+    name = html.escape((user.first_name if user else None) or "there")
+
+    caption = (
+        f"<blockquote>👋 Hey <b>{name}</b>!</blockquote>\n\n"
+        "<b>I'm your link bypass bot.</b>\n\n"
+        "Send me any shortener link and I'll pull out the direct link — "
+        "no ads, no waiting.\n\n"
+        "<b>How to use</b>\n"
+        "• Copy any short link\n"
+        "• Paste it here\n"
+        "• Get the direct link instantly\n\n"
         "<b>Example</b>\n"
-        "<code>https://link.vipshort.in/I9xA</code>\n\n"
-        f"<i>Powered by @{CREDIT}</i>",
+        "<blockquote>https://link.vipshort.in/I9xA</blockquote>\n\n"
+        f"<i>Powered by @{CREDIT}</i>"
+    )
+
+    if START_PIC:
+        try:
+            await context.bot.send_photo(
+                chat_id=message.chat_id,
+                photo=START_PIC,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001
+            log.warning("start photo failed (%s), falling back to text", exc)
+
+    await message.reply_text(
+        caption,
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
@@ -373,10 +403,10 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if same_url(link, bypassed):
         await react(message, REACT_FAIL)
         await status.edit_text(
-            "❌ <b>Bypass nahi mila</b>\n\n"
-            f"<code>{html.escape(link)}</code>\n\n"
-            "Ye kisi shortener ka link nahi lagta — direct link hai, "
-            "isliye bypass karne ko kuch nahi tha.",
+            "<blockquote>❌ No bypass for this link</blockquote>\n\n"
+            f"{html.escape(link)}\n\n"
+            "This doesn't look like a shortener link — it's already a direct "
+            "link, so there was nothing to bypass.",
             parse_mode=ParseMode.HTML,
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
@@ -384,17 +414,13 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     await react(message, REACT_OK)
 
-    credits = data.get("credits") or {}
-    used = credits.get("used", "?")
-
     await status.edit_text(
-        "<b>Original Link</b>\n"
-        f"<code>{html.escape(link)}</code>\n\n"
-        "<b>Bypassed Link</b>\n"
-        f"<code>{html.escape(bypassed)}</code>\n\n"
-        f"⏱ {elapsed:.1f}s\n"
-        f"💳 Credits used: {used}\n"
-        f"<i>Powered by @{CREDIT}</i>",
+        "<blockquote>🔗 Original Link</blockquote>\n"
+        f"{html.escape(link)}\n\n"
+        "<blockquote>✅ Bypassed Link</blockquote>\n"
+        f"{html.escape(bypassed)}\n\n"
+        f"<blockquote>⏱ Time Taken : {elapsed:.0f} seconds</blockquote>\n"
+        f"<blockquote>Powered By @{CREDIT}</blockquote>",
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
