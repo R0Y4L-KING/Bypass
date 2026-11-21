@@ -465,12 +465,10 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await react(message, REACT_OK)
 
     await status.edit_text(
-        f"<blockquote><b>—✦— {CREDIT} —✦—</b></blockquote>\n"
-        "<blockquote>" + html.escape(link) + "</blockquote>\n\n"
         "<blockquote><b>Original Link :</b></blockquote>\n"
-        "✅ " + html.escape(link) + "\n\n"
+        "<b>✅ " + html.escape(link) + "</b>\n\n"
         "<blockquote><b>Bypassed Link:</b></blockquote>\n"
-        "✅ " + html.escape(bypassed) + "\n\n"
+        "<b>✅ " + html.escape(bypassed) + "</b>\n\n"
         f"<blockquote><b>Time Taken :</b> {elapsed:.0f} seconds</blockquote>\n\n"
         "─────────────\n\n"
         f"<blockquote><b>Powered By @{CREDIT}</b></blockquote>",
@@ -556,7 +554,14 @@ def main() -> None:
     else:
         log.info("force-sub disabled (FSUB_CHANNELS khali hai)")
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        # default 1 hota hai — matlab ek waqt me ek hi update.
+        # Ek slow API call poore bot ko block kar deti thi.
+        .concurrent_updates(True)
+        .build()
+    )
     # group=-1 → baaki handlers se pehle chalta hai, par unhe rokta nahi
     app.add_handler(
         MessageHandler(filters.ALL, react_every_message, block=False), group=-1
