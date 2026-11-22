@@ -76,6 +76,9 @@ def _int_env(name: str, default: int) -> int:
 
 AUTO_DELETE = _int_env("AUTO_DELETE", 60)
 
+# User ka bheja hua link message bhi delete karna hai? (chat saaf rahe)
+DELETE_USER_MSG = (os.environ.get("DELETE_USER_MSG") or "1").strip() not in ("0", "false", "False")
+
 # /start ka thumbnail (khali karo to bina photo ke)
 START_PIC = os.environ.get(
     "START_PIC",
@@ -394,6 +397,14 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not REACT_EVERY:
         await react(message, REACT_START)
     status = await message.reply_text("🔗 Bypassing…")
+
+    # User ka link message hata do — chat saaf rahe
+    if DELETE_USER_MSG:
+        try:
+            await message.delete()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("could not delete user message: %s", exc)
+
     started = time.perf_counter()
 
     async def nudge() -> None:
