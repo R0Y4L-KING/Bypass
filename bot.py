@@ -398,12 +398,11 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await react(message, REACT_START)
     status = await message.reply_text("🔗 Bypassing…")
 
-    # User ka link message hata do — chat saaf rahe
-    if DELETE_USER_MSG:
-        try:
-            await message.delete()
-        except Exception as exc:  # noqa: BLE001
-            log.debug("could not delete user message: %s", exc)
+    def cleanup() -> None:
+        """Bot ka result aur user ka link — dono AUTO_DELETE baad, ek saath."""
+        schedule_delete(status, AUTO_DELETE)
+        if DELETE_USER_MSG:
+            schedule_delete(message, AUTO_DELETE)
 
     started = time.perf_counter()
 
@@ -428,7 +427,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"<code>{html.escape(detail[:300])}</code>",
             parse_mode=ParseMode.HTML,
         )
-        schedule_delete(status, AUTO_DELETE)
+        cleanup()
         return
 
     finally:
@@ -453,7 +452,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode=ParseMode.HTML,
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
-        schedule_delete(status, AUTO_DELETE)
+        cleanup()
         return
 
     # API ne "success" bola par link wahi ka wahi hai — matlab bypass hua hi nahi
@@ -470,7 +469,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             parse_mode=ParseMode.HTML,
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
-        schedule_delete(status, AUTO_DELETE)
+        cleanup()
         return
 
     await react(message, REACT_OK)
@@ -486,7 +485,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         parse_mode=ParseMode.HTML,
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )
-    schedule_delete(status, AUTO_DELETE)
+    cleanup()
 
 
 async def fsub_retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
