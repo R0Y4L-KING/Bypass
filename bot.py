@@ -27,6 +27,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ParseMode
+from telegram.error import Conflict
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -592,7 +593,29 @@ def main() -> None:
     app.add_error_handler(on_error)
 
     log.info("bot starting (long polling)")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    # "Conflict: terminated by other getUpdates request" tab aata hai jab
+    # ek hi token se do instance chal rahe hon — aksar deploy ke waqt purana
+    # instance abhi band nahi hua hota. Aise me crash hone ke bajaye
+    # thodi der baad retry karte hain.
+    for attempt in range(1, 6):
+        try:
+            app.run_polling(allowed_updates=Update.ALL_TYPES)
+            return
+        except Conflict:
+            wait = 15 * attempt
+            log.warning(
+                "Conflict: doosra bot instance chal raha hai (attempt %s/5). "
+                "%s second baad retry.",
+                attempt,
+                wait,
+            )
+            time.sleep(wait)
+
+    log.error(
+        "Conflict baar baar aa raha hai — koi doosra instance isi token se "
+        "chal raha hai. Render ke purane instance ya local bot band karo."
+    )
 
 
 if __name__ == "__main__":
