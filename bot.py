@@ -80,6 +80,12 @@ AUTO_DELETE = _int_env("AUTO_DELETE", 60)
 # User ka bheja hua link message bhi delete karna hai? (chat saaf rahe)
 DELETE_USER_MSG = (os.environ.get("DELETE_USER_MSG") or "1").strip() not in ("0", "false", "False")
 
+# Kitne second baad "Still working…" dikhe
+NUDGE_AFTER = _int_env("NUDGE_AFTER", 12)
+
+# Poore bypass ka hard cap — isse zyada kabhi wait nahi hoga
+HARD_LIMIT = _int_env("HARD_LIMIT", 0) or int(TIMEOUT * 2 + 15)
+
 # /start ka thumbnail (khali karo to bina photo ke)
 START_PIC = os.environ.get(
     "START_PIC",
@@ -408,8 +414,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     started = time.perf_counter()
 
     async def nudge() -> None:
-        """20s baad user ko batao ki kaam chal raha hai."""
-        await asyncio.sleep(20)
+        """Thodi der baad user ko batao ki kaam chal raha hai."""
+        await asyncio.sleep(NUDGE_AFTER)
         try:
             await status.edit_text("⏳ Still working… the API is slow, hang tight.")
         except Exception:  # noqa: BLE001
@@ -418,7 +424,19 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     nudge_task = asyncio.create_task(nudge())
 
     try:
-        data = await call_api(link)
+        # Hard cap: agar API bilkul hi jawab na de to bhi bot atke na
+        data = await asyncio.wait_for(call_api(link), timeout=HARD_LIMIT)
+    except asyncio.TimeoutError:
+        log.warning("hard limit %ss hit for %s", HARD_LIMIT, link)
+        await react(message, REACT_FAIL)
+        await status.edit_text(
+            "<blockquote><b>❌ Took too long</b></blockquote>\n"
+            f"The API didn't respond within {HARD_LIMIT} seconds. "
+            "Please try again in a bit.",
+            parse_mode=ParseMode.HTML,
+        )
+        cleanup()
+        return
     except Exception as exc:  # noqa: BLE001
         log.exception("bypass failed for %s", link)
         detail = str(exc).strip() or type(exc).__name__
