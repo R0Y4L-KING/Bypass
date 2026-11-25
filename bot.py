@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import logging
 import os
 import re
@@ -168,11 +169,13 @@ async def call_api(link: str) -> dict:
     )
 
 
-def pick_url(text: str, label: str) -> Optional[str]:
+def pick_url(text, label: str) -> Optional[str]:
     """
     `label` wali line se URL nikaalo (jaise "Bypassed Link").
     Na mile to result ka aakhri URL lauta do.
     """
+    if not isinstance(text, str):
+        text = "" if text is None else str(text)
     for line in text.splitlines():
         if label in line.lower():
             match = URL_RE.search(line)
@@ -181,6 +184,58 @@ def pick_url(text: str, label: str) -> Optional[str]:
 
     urls = URL_RE.findall(text)
     return urls[-1].rstrip("─—–- ") if urls else None
+
+
+def _url_in_value(value) -> Optional[str]:
+    """Nested dict/list/str me se pehla URL dhoondho."""
+    if isinstance(value, str):
+        match = URL_RE.search(value)
+        return match.group(0) if match else None
+
+    if isinstance(value, dict):
+        for key in (
+            "bypassed", "bypassed_link", "bypassedLink", "bypassed_url",
+            "result", "url", "final", "final_url", "direct", "direct_link",
+            "link", "target",
+        ):
+            found = _url_in_value(value.get(key))
+            if found:
+                return found
+        for val in value.values():
+            found = _url_in_value(val)
+            if found:
+                return found
+
+    if isinstance(value, list):
+        for val in reversed(value):
+            found = _url_in_value(val)
+            if found:
+                return found
+
+    return None
+
+
+def extract_bypassed(data: dict) -> tuple[Optional[str], str]:
+    """
+    API ka `result` kabhi plain text hota hai, kabhi dict ya list.
+    Dono shape handle karo — warna bot crash ho jaata hai.
+    Lautata hai: (bypassed_url, raw_text_for_log)
+    """
+    raw = data.get("result")
+
+    if isinstance(raw, str):
+        return pick_url(raw, "bypassed link"), raw
+
+    if isinstance(raw, (dict, list)):
+        return _url_in_value(raw), json.dumps(raw)[:800]
+
+    if raw is None:
+        # result hi nahi — top-level fields me dekho (key hata kar log karo)
+        return _url_in_value(data), json.dumps(
+            {k: v for k, v in data.items() if k != "key"}
+        )[:800]
+
+    return pick_url(str(raw), "bypassed link"), str(raw)
 
 
 # --------------------------------------------------------------------- force sub
@@ -452,8 +507,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     finally:
         nudge_task.cancel()
 
-    result_text = data.get("result") or ""
-    bypassed = pick_url(result_text, "bypassed link")
+    bypassed, result_text = extract_bypassed(data)
     elapsed = time.perf_counter() - started
 
     if not bypassed:
@@ -551,6 +605,18 @@ async def on_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.error,
         exc_info=context.error,
     )
+
+    # Safety net: user ko "Bypassing…" pe chhod ke chup na raho
+    try:
+        msg = update.effective_message if isinstance(update, Update) else None
+        if msg is not None:
+            await msg.reply_text(
+                "<blockquote><b>❌ Something went wrong</b></blockquote>\n"
+                "Please try again in a moment.",
+                parse_mode=ParseMode.HTML,
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.debug("could not send error notice: %s", exc)
 
 
 # --------------------------------------------------------------------- health
